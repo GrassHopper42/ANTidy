@@ -1,0 +1,1 @@
+/Users/grasshopper42/project/antidy/.claude/skills/gstack/connect-chrome/SKILL.md
