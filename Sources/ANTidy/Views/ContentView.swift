@@ -165,8 +165,10 @@ struct DashboardView: View {
             }
             .frame(minWidth: 620)
 
-            CandidateDetailView()
-                .frame(width: 330)
+            if store.focusedCandidate != nil {
+                CandidateDetailView()
+                    .frame(width: 330)
+            }
         }
         .confirmationDialog(
             "Move selected items to Trash?",
