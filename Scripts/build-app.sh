@@ -12,6 +12,7 @@ RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 BINARY_PATH="${ROOT}/.build/${CONFIGURATION}/${APP_NAME}"
 INFO_PLIST="${ROOT}/Packaging/Info.plist"
 ENTITLEMENTS="${ROOT}/Packaging/ANTidy.entitlements"
+ICON_FILE="${ROOT}/Packaging/ANTidy.icns"
 SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 
 swift build -c "${CONFIGURATION}" --product "${APP_NAME}"
@@ -21,6 +22,7 @@ mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 
 cp "${BINARY_PATH}" "${MACOS_DIR}/${APP_NAME}"
 cp "${INFO_PLIST}" "${CONTENTS_DIR}/Info.plist"
+cp "${ICON_FILE}" "${RESOURCES_DIR}/${APP_NAME}.icns"
 chmod 755 "${MACOS_DIR}/${APP_NAME}"
 
 if [[ "${SIGN_IDENTITY}" == "-" ]]; then
