@@ -336,10 +336,6 @@ struct ScannerControlStrip: View {
     @Environment(CleanupStore.self) private var store
 
     var body: some View {
-        let scannerColumns = [
-            GridItem(.adaptive(minimum: 145), spacing: 10, alignment: .leading)
-        ]
-
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Scanners")
@@ -359,11 +355,16 @@ struct ScannerControlStrip: View {
                 .liquidGlassButton()
             }
 
-            LazyVGrid(columns: scannerColumns, alignment: .leading, spacing: 10) {
-                ForEach(store.scanners, id: \.id) { scanner in
-                    ScannerToggle(scanner: scanner)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(store.scanners, id: \.id) { scanner in
+                        ScannerToggle(scanner: scanner)
+                    }
                 }
+                .padding(.vertical, 2)
+                .padding(.trailing, 2)
             }
+            .frame(height: 40)
         }
         .padding(16)
         .liquidGlassPanel(cornerRadius: 24, tint: .white.opacity(0.05), interactive: true)
