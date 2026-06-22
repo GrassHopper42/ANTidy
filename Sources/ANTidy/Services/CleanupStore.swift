@@ -18,6 +18,7 @@ final class CleanupStore {
 
     @ObservationIgnored
     private var scanTask: Task<Void, Never>?
+    private var activeScanID = UUID()
 
     init(scanners: [any CleanupScanner] = ScannerRegistry.defaultScanners) {
         self.scanners = scanners
@@ -67,6 +68,8 @@ final class CleanupStore {
 
     func runScan() {
         scanTask?.cancel()
+        let scanID = UUID()
+        activeScanID = scanID
         deletionResults = []
         candidates = []
         selectedCandidateIDs = []
@@ -78,10 +81,11 @@ final class CleanupStore {
 
         let enabledScanners = scanners.filter { enabledScannerIDs.contains($0.id) }
 
-        scanTask = Task { [enabledScanners] in
+        scanTask = Task { [enabledScanners, scanID] in
             var aggregate: [CleanupCandidate] = []
 
             for scanner in enabledScanners {
+                guard activeScanID == scanID else { return }
                 if Task.isCancelled {
                     updateScanner(scanner.id) { state in
                         state.status = .cancelled
@@ -98,13 +102,16 @@ final class CleanupStore {
                 }
 
                 do {
-                    let found = try await Task.detached(priority: .utility) {
-                        try await scanner.scan()
-                    }.value
+                    let found = try await scanner.scan()
+                    try Task.checkCancellation()
+                    guard activeScanID == scanID else { return }
 
                     aggregate.append(contentsOf: found)
-                    candidates = aggregate
-                    selectedCandidateIDs.formUnion(found.filter(\.isRecommended).map(\.id))
+                    let deduplicated = CandidateDeduplicator.deduplicate(aggregate)
+                    candidates = deduplicated
+                    let visibleIDs = Set(deduplicated.map(\.id))
+                    selectedCandidateIDs.formUnion(deduplicated.filter(\.isRecommended).map(\.id))
+                    selectedCandidateIDs.formIntersection(visibleIDs)
                     if focusedCandidateID == nil {
                         focusedCandidateID = filteredCandidates.first?.id
                     }
@@ -115,7 +122,16 @@ final class CleanupStore {
                         state.message = "\(found.count) items"
                         state.finishedAt = Date()
                     }
+                } catch is CancellationError {
+                    guard activeScanID == scanID else { return }
+                    updateScanner(scanner.id) { state in
+                        state.status = .cancelled
+                        state.message = "Cancelled"
+                        state.finishedAt = Date()
+                    }
+                    break
                 } catch {
+                    guard activeScanID == scanID else { return }
                     updateScanner(scanner.id) { state in
                         state.status = .failed
                         state.message = error.localizedDescription
@@ -124,6 +140,7 @@ final class CleanupStore {
                 }
             }
 
+            guard activeScanID == scanID else { return }
             isScanning = false
             refreshFullDiskAccessStatus()
         }
@@ -131,6 +148,7 @@ final class CleanupStore {
 
     func cancelScan() {
         scanTask?.cancel()
+        activeScanID = UUID()
         isScanning = false
         for id in scannerStates.keys {
             if scannerStates[id]?.status == .running {

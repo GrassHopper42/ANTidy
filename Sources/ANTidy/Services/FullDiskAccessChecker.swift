@@ -26,10 +26,15 @@ enum FullDiskAccessChecker {
     }
 
     private static func canRead(_ url: URL) -> Bool {
-        if url.hasDirectoryPath {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            return false
+        }
+
+        if isDirectory.boolValue {
             return (try? FileManager.default.contentsOfDirectory(atPath: url.path)) != nil
         }
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+
         do {
             let handle = try FileHandle(forReadingFrom: url)
             try? handle.close()

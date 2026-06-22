@@ -44,6 +44,7 @@ struct DeveloperJunkScanner: CleanupScanner {
     let category = CleanupCategory.developer
 
     func scan() async throws -> [CleanupCandidate] {
+        try Task.checkCancellation()
         var candidates: [CleanupCandidate] = []
         let specs = [
             KnownPathSpec(
@@ -121,15 +122,16 @@ struct DeveloperJunkScanner: CleanupScanner {
         ]
 
         for spec in specs {
+            try Task.checkCancellation()
             candidates.append(contentsOf: candidatesForKnownPath(spec))
         }
 
-        candidates.append(contentsOf: oldXcodeArchives())
+        candidates.append(contentsOf: try oldXcodeArchives())
         return candidates.filter { $0.byteCount > 0 }
             .sorted { $0.estimatedReclaimableBytes > $1.estimatedReclaimableBytes }
     }
 
-    private func oldXcodeArchives() -> [CleanupCandidate] {
+    private func oldXcodeArchives() throws -> [CleanupCandidate] {
         let root = FileSystemTools.homePath("Library/Developer/Xcode/Archives")
         guard FileSystemTools.pathExists(root) else { return [] }
 
@@ -143,6 +145,7 @@ struct DeveloperJunkScanner: CleanupScanner {
 
         var results: [CleanupCandidate] = []
         while let url = enumerator?.nextObject() as? URL {
+            try Task.checkCancellation()
             guard url.pathExtension == "xcarchive" else { continue }
             let modified = FileSystemTools.modificationDate(of: url)
             guard let modified, modified < cutoff else { continue }
@@ -171,13 +174,16 @@ struct CacheScanner: CleanupScanner {
     let category = CleanupCategory.caches
 
     func scan() async throws -> [CleanupCandidate] {
+        try Task.checkCancellation()
         let root = FileSystemTools.homePath("Library/Caches")
         guard FileSystemTools.pathExists(root) else { return [] }
 
         var candidates: [CleanupCandidate] = []
         for child in FileSystemTools.children(of: root) {
+            try Task.checkCancellation()
             let name = child.lastPathComponent
             let bundleID = BundleIDHeuristics.bundleID(fromCacheName: name)
+            let ownerIsKnown = bundleID != nil
             let isApple = FileSystemTools.isProbablyAppleOwned(bundleID)
             let size = FileSystemTools.allocatedSize(of: child)
             guard size > 0 else { continue }
@@ -186,20 +192,30 @@ struct CacheScanner: CleanupScanner {
                 url: child,
                 displayName: FileSystemTools.displayName(for: child),
                 category: .caches,
-                risk: isApple ? .verifyFirst : .safe,
+                risk: isApple || !ownerIsKnown ? .verifyFirst : .safe,
                 byteCount: size,
-                reason: isApple ? "Apple-owned cache. Review before removing." : "Application cache that can usually be regenerated.",
-                evidence: "Top-level item in ~/Library/Caches.",
+                reason: cacheReason(isApple: isApple, ownerIsKnown: ownerIsKnown),
+                evidence: ownerIsKnown ? "Top-level item in ~/Library/Caches." : "Top-level item in ~/Library/Caches with no bundle identifier match.",
                 scannerID: id,
                 modifiedAt: FileSystemTools.modificationDate(of: child),
                 relatedBundleID: bundleID,
-                isRecommended: !isApple
+                isRecommended: !isApple && ownerIsKnown
             ))
         }
 
         return candidates.sorted { $0.estimatedReclaimableBytes > $1.estimatedReclaimableBytes }
             .prefix(250)
             .map { $0 }
+    }
+
+    private func cacheReason(isApple: Bool, ownerIsKnown: Bool) -> String {
+        if isApple {
+            return "Apple-owned cache. Review before removing."
+        }
+        if !ownerIsKnown {
+            return "Cache owner could not be identified from its folder name."
+        }
+        return "Application cache that can usually be regenerated."
     }
 }
 
@@ -209,6 +225,7 @@ struct SystemJunkScanner: CleanupScanner {
     let category = CleanupCategory.system
 
     func scan() async throws -> [CleanupCandidate] {
+        try Task.checkCancellation()
         var candidates: [CleanupCandidate] = []
 
         let logSpecs = [
@@ -239,12 +256,14 @@ struct SystemJunkScanner: CleanupScanner {
         ]
 
         for spec in logSpecs {
+            try Task.checkCancellation()
             candidates.append(contentsOf: candidatesForKnownPath(spec))
         }
 
         let backups = FileSystemTools.homePath("Library/Application Support/MobileSync/Backup")
         if FileSystemTools.pathExists(backups) {
             for child in FileSystemTools.children(of: backups) {
+                try Task.checkCancellation()
                 let size = FileSystemTools.allocatedSize(of: child)
                 guard size > 0 else { continue }
                 candidates.append(CleanupCandidate(
@@ -275,6 +294,7 @@ struct LargeFileScanner: CleanupScanner {
     private let threshold: Int64 = 500 * 1_024 * 1_024
 
     func scan() async throws -> [CleanupCandidate] {
+        try Task.checkCancellation()
         let roots = [
             FileSystemTools.homePath("Downloads"),
             FileSystemTools.homePath("Desktop"),
@@ -286,6 +306,7 @@ struct LargeFileScanner: CleanupScanner {
         let keys = Array(FileSystemTools.metadataKeys)
 
         for root in roots {
+            try Task.checkCancellation()
             let enumerator = FileManager.default.enumerator(
                 at: root,
                 includingPropertiesForKeys: keys,
@@ -295,6 +316,7 @@ struct LargeFileScanner: CleanupScanner {
 
             var scanned = 0
             while let url = enumerator?.nextObject() as? URL {
+                try Task.checkCancellation()
                 scanned += 1
                 if scanned > 20_000 {
                     break
@@ -330,6 +352,7 @@ struct OrphanedAppDataScanner: CleanupScanner {
     let category = CleanupCategory.orphans
 
     func scan() async throws -> [CleanupCandidate] {
+        try Task.checkCancellation()
         let installedBundleIDs = InstalledApplicationIndex.bundleIDs()
         let roots: [(URL, String)] = [
             (FileSystemTools.homePath("Library/Containers"), "Sandbox container"),
@@ -347,6 +370,7 @@ struct OrphanedAppDataScanner: CleanupScanner {
 
         for (root, evidence) in roots where FileSystemTools.pathExists(root) {
             for child in FileSystemTools.children(of: root) {
+                try Task.checkCancellation()
                 guard seenPaths.insert(child.path).inserted else { continue }
                 guard let bundleID = BundleIDHeuristics.bundleID(fromLibraryItemName: child.lastPathComponent) else {
                     continue
@@ -390,6 +414,7 @@ struct DuplicateScanner: CleanupScanner {
     private let minimumSize: Int64 = 64 * 1_024
 
     func scan() async throws -> [CleanupCandidate] {
+        try Task.checkCancellation()
         let roots = [
             FileSystemTools.homePath("Downloads"),
             FileSystemTools.homePath("Desktop"),
@@ -404,6 +429,7 @@ struct DuplicateScanner: CleanupScanner {
         var bySample: [String: [FileRecord]] = [:]
         for group in bySize.values {
             for record in group {
+                try Task.checkCancellation()
                 guard let fingerprint = try? partialSHA256(of: record.url, size: record.size) else { continue }
                 bySample[fingerprint, default: []].append(record)
             }
@@ -412,6 +438,7 @@ struct DuplicateScanner: CleanupScanner {
         var byFullHash: [String: [FileRecord]] = [:]
         for group in bySample.values where group.count > 1 {
             for record in group {
+                try Task.checkCancellation()
                 guard let digest = try? fullSHA256(of: record.url) else { continue }
                 byFullHash[digest, default: []].append(record)
             }
@@ -419,6 +446,7 @@ struct DuplicateScanner: CleanupScanner {
 
         var candidates: [CleanupCandidate] = []
         for (digest, group) in byFullHash where group.count > 1 {
+            try Task.checkCancellation()
             let sortedGroup = group.sorted { lhs, rhs in
                 if lhs.url.pathComponents.count == rhs.url.pathComponents.count {
                     return lhs.url.path < rhs.url.path
@@ -429,6 +457,7 @@ struct DuplicateScanner: CleanupScanner {
             let groupID = String(digest.prefix(16))
 
             for duplicate in sortedGroup.dropFirst() {
+                try Task.checkCancellation()
                 let cloneSuspect = FileSystemTools.mayShareFileContent(duplicate.url)
                     && FileSystemTools.mayShareFileContent(keeper.url)
                 let reclaimable = cloneSuspect ? Int64(0) : duplicate.size
@@ -462,6 +491,7 @@ struct DuplicateScanner: CleanupScanner {
         let keys = Array(FileSystemTools.metadataKeys)
 
         for root in roots {
+            if Task.isCancelled { break }
             let enumerator = FileManager.default.enumerator(
                 at: root,
                 includingPropertiesForKeys: keys,
@@ -471,6 +501,7 @@ struct DuplicateScanner: CleanupScanner {
 
             var scanned = 0
             while let url = enumerator?.nextObject() as? URL {
+                if Task.isCancelled { break }
                 scanned += 1
                 if scanned > 15_000 || records.count > 6_000 {
                     break
@@ -486,6 +517,7 @@ struct DuplicateScanner: CleanupScanner {
     }
 
     private func partialSHA256(of url: URL, size: Int64) throws -> String {
+        try Task.checkCancellation()
         let sampleSize = 64 * 1_024
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
@@ -496,6 +528,7 @@ struct DuplicateScanner: CleanupScanner {
 
         var sample = Data()
         for offset in offsets {
+            try Task.checkCancellation()
             try handle.seek(toOffset: UInt64(offset))
             sample.append(handle.readData(ofLength: sampleSize))
         }
@@ -504,11 +537,13 @@ struct DuplicateScanner: CleanupScanner {
     }
 
     private func fullSHA256(of url: URL) throws -> String {
+        try Task.checkCancellation()
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
 
         var hasher = SHA256()
         while true {
+            try Task.checkCancellation()
             let chunk = handle.readData(ofLength: 4 * 1_024 * 1_024)
             if chunk.isEmpty {
                 break

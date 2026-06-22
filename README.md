@@ -8,9 +8,24 @@ ANTidy is a native macOS SwiftUI cleaner prototype built from the attached imple
 swift run ANTidy
 ```
 
+## Build App Bundle
+
+```bash
+Scripts/build-app.sh
+```
+
+The script creates `dist/ANTidy.app` with bundle identifier `com.grasshopper42.antidy`.
+By default it uses ad-hoc signing for local testing. For Developer ID signing and a
+hardened runtime build, pass a signing identity:
+
+```bash
+CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" Scripts/build-app.sh
+```
+
 ## Implemented
 
 - SwiftUI macOS app with Apple Liquid Glass APIs on macOS 26 and material fallback on older supported macOS releases.
+- `.app` bundle packaging with Info.plist, stable bundle identifier, and signing hook.
 - Safe scan/review/delete flow.
 - Full Disk Access status probe and System Settings shortcut.
 - Scanners for developer junk, app caches, logs/reports, iOS backups, large files, orphaned app data, and byte-identical duplicates.

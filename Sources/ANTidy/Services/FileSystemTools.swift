@@ -51,6 +51,9 @@ enum FileSystemTools {
         )
 
         while let child = enumerator?.nextObject() as? URL {
+            if Task.isCancelled {
+                break
+            }
             scannedItems += 1
             if scannedItems > maxItems {
                 break
