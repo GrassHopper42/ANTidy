@@ -8,6 +8,8 @@
 	<string>ANTidy</string>
 	<key>CFBundleExecutable</key>
 	<string>ANTidy</string>
+	<key>CFBundleIconFile</key>
+	<string>ANTidy</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.grasshopper42.antidy</string>
 	<key>CFBundleInfoDictionaryVersion</key>
