@@ -23,11 +23,11 @@ enum CleanupCategory: String, CaseIterable, Identifiable, Sendable {
 
     var subtitle: String {
         switch self {
-        case .developer: "Xcode, simulators, package caches"
+        case .developer: "Xcode, Simulators, SwiftPM"
         case .caches: "Regenerated app data"
-        case .system: "Logs, reports, device backups"
+        case .system: "Logs, reports, backups"
         case .largeFiles: "Big user-owned files"
-        case .orphans: "Data from removed apps"
+        case .orphans: "Removed app leftovers"
         case .duplicates: "Byte-identical files"
         }
     }

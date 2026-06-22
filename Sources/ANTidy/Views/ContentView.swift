@@ -9,7 +9,7 @@ struct ContentView: View {
             AppBackground()
             HStack(spacing: 18) {
                 SidebarView()
-                    .frame(width: 260)
+                    .frame(width: 280)
 
                 DashboardView()
             }
@@ -39,6 +39,8 @@ struct SidebarView: View {
                 Text("Tiny workers for safe cleanup")
                     .foregroundStyle(.secondary)
                     .font(.callout)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
             }
 
             VStack(spacing: 8) {
@@ -121,6 +123,7 @@ struct SidebarButton: View {
                     Text(title)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
                     Text(count == 0 ? subtitle : bytes.formattedFileSize)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -333,6 +336,10 @@ struct ScannerControlStrip: View {
     @Environment(CleanupStore.self) private var store
 
     var body: some View {
+        let scannerColumns = [
+            GridItem(.adaptive(minimum: 145), spacing: 10, alignment: .leading)
+        ]
+
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Scanners")
@@ -352,13 +359,10 @@ struct ScannerControlStrip: View {
                 .liquidGlassButton()
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(store.scanners, id: \.id) { scanner in
-                        ScannerToggle(scanner: scanner)
-                    }
+            LazyVGrid(columns: scannerColumns, alignment: .leading, spacing: 10) {
+                ForEach(store.scanners, id: \.id) { scanner in
+                    ScannerToggle(scanner: scanner)
                 }
-                .padding(.vertical, 2)
             }
         }
         .padding(16)
